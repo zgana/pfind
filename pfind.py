@@ -211,13 +211,14 @@ class ParticleFinder(object):
         """Find local maxima in image."""
         # force size EVEN
         size = self.lsize + 1 if self.lsize % 2 else self.lsize
+        sizeby2 = size // 2
         # get initial image
         im = np.copy(self.im)
         im[im <= self.threshold] = 0
-        im[:size/2, :] = 0
-        im[-size/2:, :] = 0
-        im[:, :size/2] = 0
-        im[:, -size/2:] = 0
+        im[:sizeby2, :] = 0
+        im[-sizeby2, :] = 0
+        im[:, :sizeby2] = 0
+        im[:, -sizeby2:] = 0
         # find initial set of peaks
         footprint = ndimage.generate_binary_structure(2, 2)
         peaks = im * (ndimage.maximum_filter(im, footprint=footprint) == im)
@@ -226,10 +227,10 @@ class ParticleFinder(object):
         # NOTE: in principle, could use maximum_filter with a wider window
         # this is however MUCH slower
         for i, j in zip(i0, j0):
-            left = max(0, i - size/2)
-            right = min(im.shape[0], i + size/2)
-            low = max(0, j - size/2)
-            high = min(im.shape[1], j + size/2)
+            left = max(0, i - sizeby2)
+            right = min(im.shape[0], i + sizeby2)
+            low = max(0, j - sizeby2)
+            high = min(im.shape[1], j + sizeby2)
             sub_peaks = peaks[left:right,low:high]
             sub_peaks[sub_peaks != sub_peaks.max()] = 0
         y, x = np.where(peaks)
@@ -241,7 +242,7 @@ class ParticleFinder(object):
         # force size ODD
         size = self.lsize if self.lsize % 2 == 1 else self.lsize + 1
         size += 2
-        r = (size + 1) / 2
+        r = (size + 1) // 2
         # get "nearby" mask
         i, j = np.ogrid[-r+1:r, -r+1:r]
         dist = np.sqrt(i**2 + j**2)
