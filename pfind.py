@@ -21,16 +21,13 @@ Example:
     import matplotlib.pyplot as plt
     from pfind import ParticleFinder
 
-    pf = ParticleFinder ('example.png', lsize=11, lnoise=1.5, lobject=9)
+    pf = ParticleFinder('example.png', lsize=11, lnoise=1.5, lobject=9)
     x, y = pf.df.x, pf.df.y
 
-    plt.imshow (pf.im, cmap='Greys_r')
-    plt.scatter (x, y, color='cyan', s=1)
+    plt.imshow(pf.im, cmap='Greys_r')
+    plt.scatter(x, y, color='cyan', s=1)
 """
 
-
-from collections import defaultdict
-from itertools import izip
 
 try:
     import cv2
@@ -45,13 +42,13 @@ from scipy.signal import convolve2d
 import progressbar
 
 
-class ParticleFinder (object):
+class ParticleFinder(object):
 
     """
     Callable for finding functions in an image.
     """
 
-    def __init__ (self, im,
+    def __init__(self, im,
                   lsize=9, lnoise=1.0, lobject=0.0, pscale=5, threshold=0,
                   pre='smoothing', post='',
                   x='x', y='y', intensity='intensity', size='size'
@@ -59,26 +56,26 @@ class ParticleFinder (object):
         """
         Create a ParticleFinder.
 
-            im (array or str):
+            im(array or str):
                 image array or filename for one
-            lsize (int):
-                approximate particle size in pixels (for rejecting duplicate
+            lsize(int):
+                approximate particle size in pixels(for rejecting duplicate
                 intensity peaks)
-            lnoise (float):
+            lnoise(float):
                 Gaussian smoothing radius in pixels
-            lobject (float):
-                approximate particle size in pixels (for the high pass filter)
-            pscale (float):
+            lobject(float):
+                approximate particle size in pixels(for the high pass filter)
+            pscale(float):
                 percentage empty and saturated for scaling
-            threshold (float):
+            threshold(float):
                 minimum pixel value
-            pre (str):
+            pre(str):
                 space-separated list of [opening, scaling, smoothing] options
-                for image pre-processing (before peak finding)
-            post (str):
+                for image pre-processing(before peak finding)
+            post(str):
                 space-separated list of [opening, scaling, smoothing] options
-                for image post-processing (after peak finding)
-            x, y, intensity, size (str):
+                for image post-processing(after peak finding)
+            x, y, intensity, size(str):
                 names of DataFrame arrays for these quantities
 
         Example for pre or post: pre='opening scaling smoothing'
@@ -92,16 +89,16 @@ class ParticleFinder (object):
         self._ims = []
 
         # load image if necessary
-        if isinstance (im, str):
-            im = 1.0 * ndimage.imread (im)
+        if isinstance(im, str):
+            im = 1.0 * ndimage.imread(im)
         else:
-            im = np.asarray (im, dtype=float)
+            im = np.asarray(im, dtype=float)
 
         # store initial image
-        self._ims.append (im)
+        self._ims.append(im)
 
-        def do_processing (methods):
-            for method in methods.split ():
+        def do_processing(methods):
+            for method in methods.split():
                 if method == 'opening':
                     func = self.opening
                 elif method == 'scaling':
@@ -109,95 +106,97 @@ class ParticleFinder (object):
                 elif method == 'smoothing':
                     func = self.smoothing
                 else:
-                    raise NotImplementedError (
+                    raise NotImplementedError(
                         'preprocessing method "{}" '
-                        'not supported'.format (method))
-                self._ims.append (func ())
+                        'not supported'.format(method))
+                self._ims.append(func())
 
         # perform preprocessing
-        do_processing (pre)
+        do_processing(pre)
         # find peaks, reject duplicates
-        xs, ys = self.get_peaks ()
-        XYIR2 = self.refine_peaks (xs, ys)
+        xs, ys = self.get_peaks()
+        XYIR2 = self.refine_peaks(xs, ys)
         # store results as DataFrame
         columns = [x, y, intensity, size]
-        self._df = pd.DataFrame (np.vstack (XYIR2).T, columns=columns)
+        self._df = pd.DataFrame(np.vstack(XYIR2).T, columns=columns)
         # perform postprocessing
-        do_processing (post)
+        do_processing(post)
 
 
     # Data Access -----------------------------------------------------
 
     @property
-    def ims (self):
+    def ims(self):
         """All images in the processing chain."""
         return self._ims
 
     @property
-    def im (self):
+    def im(self):
         """The image."""
         return self._ims[-1]
 
     @property
-    def df (self):
+    def df(self):
         """The pandas.DataFrame""" 
         return self._df
 
 
     # Processing Methods ----------------------------------------------
 
-    def opening (self):
+    def opening(self):
         """Perform a grey opening: an erosion followed by a dilation."""
-        def disk (N):
+        def disk(N):
             """Get circle morphology."""
             y, x = np.ogrid[-N:N+.1, -N:N+.1]
             return  np.asarray(x**2 + y**2 < N**2, dtype=np.uint8)
         # obtain and subtract background lighting level
         kernel = disk(self.lsize)
         if not cv2:
-             background = ndimage.grey_opening (self.im, structure=kernel)
+             background = ndimage.grey_opening(self.im, structure=kernel)
         else:
-             background = cv2.dilate (cv2.erode (self.im, kernel), kernel)
+             background = cv2.dilate(cv2.erode(self.im, kernel), kernel)
         I2 = self.im - background
         return I2
 
-    def scaling (self):
+    def scaling(self):
         """Scale overall image to increase contrast."""
         im = self.im
         perc = self.pscale
-        contrast_min, contrast_max = stats.scoreatpercentile (im, [perc, 100-perc])
+        contrast_min, contrast_max = stats.scoreatpercentile(im, [perc, 100-perc])
         scale = 255. / (contrast_max - contrast_min)
         I_scaled = scale * im - contrast_min
-        return np.clip (I_scaled, 0, 255)
+        return np.clip(I_scaled, 0, 255)
 
-    def smoothing (self):
-        """Perform low and/or high pass filtering."""
-        def normed (x):
-            return 1. * x / np.sum (x)
+    def smoothing(self):
+        """Perform low and/or high pass filtering.
+
+        TODO: why does this use signal.convolve2d instead of ndimage.gaussian_filter?"""
+        def normed(x):
+            return 1. * x / np.sum(x)
         # prep for low pass
         if self.lnoise == 0:
             gaussian_kernel = 1.0
         else:
-            xmax = np.ceil (5 * self.lnoise)
-            x = np.arange (-xmax, xmax + 1) / (2 * self.lnoise)
-            gaussian_kernel = np.atleast_2d (normed (np.exp(-1. * x**2)))
+            xmax = np.ceil(5 * self.lnoise)
+            x = np.arange(-xmax, xmax + 1) / (2 * self.lnoise)
+            gaussian_kernel = np.atleast_2d(normed(np.exp(-1. * x**2)))
         # prep for high pass
         if self.lobject:
-            xmax = round (self.lobject)
-            x = np.arange (-xmax, xmax + 1)
-            boxcar_kernel = np.atleast_2d (normed (np.ones(x.shape)))
+            xmax = round(self.lobject)
+            x = np.arange(-xmax, xmax + 1)
+            boxcar_kernel = np.atleast_2d(normed(np.ones(x.shape)))
         # perform low pass
-        gconv = convolve2d (self.im.T, gaussian_kernel.T, 'same')
-        gconv = convolve2d (gconv.T, gaussian_kernel.T, 'same')
+        gconv = convolve2d(self.im.T, gaussian_kernel.T, 'same')
+        gconv = convolve2d(gconv.T, gaussian_kernel.T, 'same')
         # perform high pass
         if self.lobject:
-            bconv = convolve2d (self.im.T, boxcar_kernel.T, 'same')
-            bconv = convolve2d (bconv.T, boxcar_kernel.T, 'same')
+            bconv = convolve2d(self.im.T, boxcar_kernel.T, 'same')
+            bconv = convolve2d(bconv.T, boxcar_kernel.T, 'same')
             filtered = gconv - bconv
         else:
             filtered = gconv
         # mask out unusable border region
-        lzero = int (max (np.ceil (self.lobject), np.ceil (5 * self.lnoise)))
+        lzero = int(max(np.ceil(self.lobject), np.ceil(5 * self.lnoise)))
         filtered[:,:lzero] = 0
         filtered[:,-lzero:] = 0
         filtered[-lzero:,:] = 0
@@ -208,35 +207,35 @@ class ParticleFinder (object):
 
     # Peak-finding Methods --------------------------------------------
 
-    def get_peaks (self):
+    def get_peaks(self):
         """Find local maxima in image."""
         # force size EVEN
         size = self.lsize + 1 if self.lsize % 2 else self.lsize
         # get initial image
-        im = np.copy (self.im)
+        im = np.copy(self.im)
         im[im <= self.threshold] = 0
         im[:size/2, :] = 0
         im[-size/2:, :] = 0
         im[:, :size/2] = 0
         im[:, -size/2:] = 0
         # find initial set of peaks
-        footprint = ndimage.generate_binary_structure (2, 2)
-        peaks = im * (ndimage.maximum_filter (im, footprint=footprint) == im)
-        i0, j0 = np.where (peaks > 0)
+        footprint = ndimage.generate_binary_structure(2, 2)
+        peaks = im * (ndimage.maximum_filter(im, footprint=footprint) == im)
+        i0, j0 = np.where(peaks > 0)
         # when peaks are too close together, keep only the brightest
         # NOTE: in principle, could use maximum_filter with a wider window
         # this is however MUCH slower
-        for i, j in izip (i0, j0):
-            left = max (0, i - size/2)
-            right = min (im.shape[0], i + size/2)
-            low = max (0, j - size/2)
-            high = min (im.shape[1], j + size/2)
+        for i, j in zip(i0, j0):
+            left = max(0, i - size/2)
+            right = min(im.shape[0], i + size/2)
+            low = max(0, j - size/2)
+            high = min(im.shape[1], j + size/2)
             sub_peaks = peaks[left:right,low:high]
-            sub_peaks[sub_peaks != sub_peaks.max ()] = 0
-        y, x = np.where (peaks)
+            sub_peaks[sub_peaks != sub_peaks.max()] = 0
+        y, x = np.where(peaks)
         return x, y
 
-    def refine_peaks (self, xs, ys):
+    def refine_peaks(self, xs, ys):
         """Refine peaks in image, weighting by nearby pixels."""
         im = self.im
         # force size ODD
@@ -245,12 +244,12 @@ class ParticleFinder (object):
         r = (size + 1) / 2
         # get "nearby" mask
         i, j = np.ogrid[-r+1:r, -r+1:r]
-        dist = np.sqrt (i**2 + j**2)
+        dist = np.sqrt(i**2 + j**2)
         mask = dist < r
         dist2 = mask * dist**2
 
         # window x,y coords
-        window_x, window_y = np.meshgrid (1. + np.r_[:size], 1. + np.r_[:size])
+        window_x, window_y = np.meshgrid(1. + np.r_[:size], 1. + np.r_[:size])
 
         # remove peaks too close to edge
         keep_peaks = (1.5 * size < xs) & (xs < im.shape[1]) \
@@ -259,34 +258,34 @@ class ParticleFinder (object):
 
         # refine peak positions
         onorms, oxs, oys, org2s = [], [], [], []
-        for (x, y) in izip (xs, ys):
+        for (x, y) in zip(xs, ys):
             # get sub image
-            left = max (0, y - r + 1)
-            right = min (im.shape[0], y + r)
-            low = max (0, x - r + 1)
-            high = min (im.shape[1], x + r)
+            left = max(0, y - r + 1)
+            right = min(im.shape[0], y + r)
+            low = max(0, x - r + 1)
+            high = min(im.shape[1], x + r)
             sub_im = im[left:right, low:high]
-            norm = np.sum (sub_im)
+            norm = np.sum(sub_im)
             # find weighted average position
-            x_avg = np.sum (sub_im * window_x) / norm
-            y_avg = np.sum (sub_im * window_x) / norm
+            x_avg = np.sum(sub_im * window_x) / norm
+            y_avg = np.sum(sub_im * window_x) / norm
             # find square of radius of gyration
-            rg2 = np.sum (sub_im * dist2) / norm
+            rg2 = np.sum(sub_im * dist2) / norm
             # store results
-            onorms.append (norm)
-            oxs.append (x + x_avg - r)
-            oys.append (y + y_avg - r)
-            org2s.append (rg2)
+            onorms.append(norm)
+            oxs.append(x + x_avg - r)
+            oys.append(y + y_avg - r)
+            org2s.append(rg2)
 
-        return np.array (oxs), np.array (oys), \
-               np.array (onorms), np.array (org2s)
+        return np.array(oxs), np.array(oys), \
+               np.array(onorms), np.array(org2s)
 
 
-def link (df, every=None, smooth=3, threshold=.25, output='particle', want_maps=False):
+def link(df, every=None, smooth=3, threshold=.25, output='particle', want_maps=False):
     """
     Link particle trajectories.
 
-        df (DataFrame):
+        df(DataFrame):
             x, y, frame, for each particle, for each frame
         every:
             process in batches of n=`every` frames
@@ -303,7 +302,7 @@ def link (df, every=None, smooth=3, threshold=.25, output='particle', want_maps=
         if want_maps:
             df, (bx, by, maps)
             # plot particle mapping for first batch:
-            # plt.pcolormesh (bx, by, maps[0].T)
+            # plt.pcolormesh(bx, by, maps[0].T)
         else:
             df  
             # just the dataframe, now with particle ids
@@ -318,16 +317,16 @@ def link (df, every=None, smooth=3, threshold=.25, output='particle', want_maps=
         x,y units.
     """
     # dense histogram bins
-    bx = np.arange (
-        int (np.nanmin (df.x.values)) - 1,
-        2 + int (np.nanmax (df.x.values)),
+    bx = np.arange(
+        int(np.nanmin(df.x.values)) - 1,
+        2 + int(np.nanmax(df.x.values)),
         .5)
-    by = np.arange (
-        int (np.nanmin (df.y.values)) - 1,
-        2 + int (np.nanmax (df.y.values)),
+    by = np.arange(
+        int(np.nanmin(df.y.values)) - 1,
+        2 + int(np.nanmax(df.y.values)),
         .5)
     # identify frame and batch boundaries
-    idx_frames = np.r_[0, np.where (np.diff (df.frame.values))[0]]
+    idx_frames = np.r_[0, np.where(np.diff(df.frame.values))[0]]
     first_frame, last_frame = df.frame.values[[0,-1]]
     if every is None:
         every = last_frame + 1
@@ -336,30 +335,31 @@ def link (df, every=None, smooth=3, threshold=.25, output='particle', want_maps=
     hs = []
     while i_low < last_frame:
         # histogram particle positions within batch
-        i_high = min (i_low + every, last_frame)
+        i_high = min(i_low + every, last_frame)
         idx_low, idx_high = idx_frames[[i_low, i_high]]
-        h, bins = np.histogramdd (
+        h, bins = np.histogramdd(
             (df.x.values[idx_low:idx_high], df.y.values[idx_low:idx_high]),
             bins=[bx, by]
         )
-        hs.append (h)
+        hs.append(h)
         i_low += every
-    hs = np.array (hs)
+    hs = np.array(hs)
     # smooth and apply threshold
-    hs = ndimage.gaussian_filter (1. * hs, smooth)
-    masks = np.where (hs > threshold * every / 100., 1, 0)
+    hs = ndimage.gaussian_filter(1. * hs, smooth)
+    masks = np.where(hs > threshold * every / 100., 1, 0)
     # define labels
-    labels = ndimage.label (masks)[0]
+    labels = ndimage.label(masks)[0]
     labels[labels == 0] = -1
     # assign labels to particles
-    imask = np.asarray (df.frame / every, dtype=int)
-    ix = np.searchsorted (bx, df.x.values) - 1
-    iy = np.searchsorted (by, df.y.values) - 1
+    imask = np.asarray(df.frame / every, dtype=int)
+    ix = np.searchsorted(bx, df.x.values) - 1
+    iy = np.searchsorted(by, df.y.values) - 1
     df['particle'] = labels[imask, ix, iy]
     if want_maps:
-        maps = np.ma.array (masks)
+        maps = np.ma.array(masks)
         maps.mask |= maps < 0
         return df, (bx[:-1], by[:-1], maps)
     else:
         return df
+
 
