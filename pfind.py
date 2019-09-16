@@ -38,6 +38,8 @@ import pandas as pd
 from scipy import ndimage, stats
 from scipy.signal import convolve2d
 
+from matplotlib.pyplot import imread
+
 
 import progressbar
 
@@ -90,7 +92,7 @@ class ParticleFinder(object):
 
         # load image if necessary
         if isinstance(im, str):
-            im = 1.0 * ndimage.imread(im)
+            im = 1.0 * imread(im)
         else:
             im = np.asarray(im, dtype=float)
 
