@@ -224,7 +224,7 @@ class ParticleFinder(object):
             filtered = gconv - bconv
         else:
             filtered = gconv
-        ask out unusable border region
+        # mask out unusable border region
         lzero = int(max(np.ceil(self.lobject), np.ceil(5 * self.lnoise)))
         filtered[:,:lzero] = 0
         filtered[:,-lzero:] = 0
