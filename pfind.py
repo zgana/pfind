@@ -56,7 +56,8 @@ class ParticleFinder(object):
                  pre='smoothing leveling', post='',
                  transform=None,
                  circular_intensity=False,
-                 x='x', y='y', intensity='intensity', size='size'):
+                 x='x', y='y', intensity='intensity', size='size',
+                 dropna=True):
         """
         Create a ParticleFinder.
 
@@ -85,6 +86,8 @@ class ParticleFinder(object):
                 whether to integrate intensity over only a circular region
             x, y, intensity, size(str):
                 names of DataFrame arrays for these quantities
+            dropna(bool):
+                whether to drop particles with unmeasureable values (default True)
 
         Example for pre or post: pre='opening scaling smoothing'
         """
@@ -137,6 +140,8 @@ class ParticleFinder(object):
         self._df = pd.DataFrame(np.vstack(XYIR2).T, columns=columns)
         # perform postprocessing
         do_processing(post)
+        if dropna:
+            self._df = self._df.dropna().copy()
 
 
     # Data Access -----------------------------------------------------
