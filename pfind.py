@@ -52,7 +52,8 @@ class ParticleFinder(object):
 
     def __init__(self, im,
                  lsize=9, lnoise=1.0, lobject=0.0, pscale=5, threshold=0,
-                 pre='smoothing', post='',
+                 lbackground=100,
+                 pre='smoothing leveling', post='',
                  transform=None,
                  circular_intensity=False,
                  x='x', y='y', intensity='intensity', size='size'):
@@ -73,10 +74,10 @@ class ParticleFinder(object):
             threshold(float):
                 minimum pixel value
             pre(str):
-                space-separated list of [opening, scaling, smoothing] options
+                space-separated list of [opening, scaling, smoothing, leveling] options
                 for image pre-processing(before peak finding)
             post(str):
-                space-separated list of [opening, scaling, smoothing] options
+                space-separated list of [opening, scaling, smoothing, leveling] options
                 for image post-processing(after peak finding)
             transform(function):
                 transformation to apply to the image before doing anything else
@@ -91,6 +92,7 @@ class ParticleFinder(object):
         self.lsize = lsize
         self.lnoise = lnoise
         self.lobject = lobject
+        self.lbackground = lbackground
         self.pscale = pscale
         self.threshold = threshold
         self.circular_intensity = circular_intensity
@@ -115,6 +117,10 @@ class ParticleFinder(object):
                     func = self.scaling
                 elif method == 'smoothing':
                     func = self.smoothing
+                elif method == 'leveling':
+                    func = self.leveling
+                elif method == 'OLD_smoothing':
+                    func = self.OLD_smoothing
                 else:
                     raise NotImplementedError(
                         'preprocessing method "{}" '
@@ -177,7 +183,19 @@ class ParticleFinder(object):
         I_scaled = scale * im - contrast_min
         return np.clip(I_scaled, 0, 255)
 
+    def leveling(self):
+        """Perform leveling in xy."""
+        bg = ndimage.gaussian_filter(self.im, self.lbackground)
+        filtered = self.im - bg
+        filtered -= filtered.min()
+        # print(filtered.shape, filtered.min(), filtered.max())
+        return filtered
+
     def smoothing(self):
+        """Perform low pass filtering."""
+        return ndimage.gaussian_filter(self.im, self.lnoise)
+
+    def OLD_smoothing(self):
         """Perform low and/or high pass filtering.
 
         TODO: why does this use signal.convolve2d instead of ndimage.gaussian_filter?"""
@@ -198,6 +216,7 @@ class ParticleFinder(object):
         # perform low pass
         gconv = convolve2d(self.im.T, gaussian_kernel.T, 'same')
         gconv = convolve2d(gconv.T, gaussian_kernel.T, 'same')
+        filtered = gconv
         # perform high pass
         if self.lobject:
             bconv = convolve2d(self.im.T, boxcar_kernel.T, 'same')
@@ -205,7 +224,7 @@ class ParticleFinder(object):
             filtered = gconv - bconv
         else:
             filtered = gconv
-        # mask out unusable border region
+        ask out unusable border region
         lzero = int(max(np.ceil(self.lobject), np.ceil(5 * self.lnoise)))
         filtered[:,:lzero] = 0
         filtered[:,-lzero:] = 0
@@ -272,19 +291,23 @@ class ParticleFinder(object):
         for (x, y) in zip(xs, ys):
             # get sub image
             left = max(0, y - r + 1)
-            right = min(im.shape[0], y + r)
+            right = min(im.shape[0]+1, y + r)
             low = max(0, x - r + 1)
-            high = min(im.shape[1], x + r)
+            high = min(im.shape[1]+1, x + r)
             sub_im = im[left:right, low:high]
             if self.circular_intensity and (sub_im.shape == mask.shape):
                 norm = np.sum(sub_im[mask])
             else:
                 norm = np.sum(sub_im)
-            # find weighted average position
-            x_avg = np.sum(sub_im * window_x) / norm
-            y_avg = np.sum(sub_im * window_x) / norm
-            # find square of radius of gyration
-            rg2 = np.sum(sub_im * dist2) / norm
+            if sub_im.shape != window_x.shape:
+                # unmeasureable
+                rg2 = norm = x_avg = y_avg = np.nan
+            else:
+                # find weighted average position
+                x_avg = np.sum(sub_im * window_x) / norm
+                y_avg = np.sum(sub_im * window_y) / norm
+                # find square of radius of gyration
+                rg2 = np.sum(sub_im * dist2) / norm
             # store results
             onorms.append(norm)
             oxs.append(x + x_avg - r)
