@@ -51,10 +51,11 @@ class ParticleFinder(object):
     """
 
     def __init__(self, im,
-                  lsize=9, lnoise=1.0, lobject=0.0, pscale=5, threshold=0,
-                  pre='smoothing', post='',
-                  x='x', y='y', intensity='intensity', size='size'
-                 ):
+                 lsize=9, lnoise=1.0, lobject=0.0, pscale=5, threshold=0,
+                 pre='smoothing', post='',
+                 transform=None,
+                 circular_intensity=False,
+                 x='x', y='y', intensity='intensity', size='size'):
         """
         Create a ParticleFinder.
 
@@ -77,6 +78,10 @@ class ParticleFinder(object):
             post(str):
                 space-separated list of [opening, scaling, smoothing] options
                 for image post-processing(after peak finding)
+            transform(function):
+                transformation to apply to the image before doing anything else
+            circular_intensity(bool):
+                whether to integrate intensity over only a circular region
             x, y, intensity, size(str):
                 names of DataFrame arrays for these quantities
 
@@ -88,6 +93,7 @@ class ParticleFinder(object):
         self.lobject = lobject
         self.pscale = pscale
         self.threshold = threshold
+        self.circular_intensity = circular_intensity
         self._ims = []
 
         # load image if necessary
@@ -95,6 +101,8 @@ class ParticleFinder(object):
             im = 1.0 * imread(im)
         else:
             im = np.asarray(im, dtype=float)
+        if transform is not None:
+            im = transform(im)
 
         # store initial image
         self._ims.append(im)
@@ -268,7 +276,10 @@ class ParticleFinder(object):
             low = max(0, x - r + 1)
             high = min(im.shape[1], x + r)
             sub_im = im[left:right, low:high]
-            norm = np.sum(sub_im)
+            if self.circular_intensity and (sub_im.shape == mask.shape):
+                norm = np.sum(sub_im[mask])
+            else:
+                norm = np.sum(sub_im)
             # find weighted average position
             x_avg = np.sum(sub_im * window_x) / norm
             y_avg = np.sum(sub_im * window_x) / norm
