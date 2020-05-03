@@ -41,9 +41,6 @@ from scipy.signal import convolve2d
 from matplotlib.pyplot import imread
 
 
-import progressbar
-
-
 class ParticleFinder(object):
 
     """
